@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Classroom ArUco Response System</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: #1e293b;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      background-color: var(--panel-bg);
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 { font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .status-badge {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: #065f46;
+      color: #34d399;
+      font-weight: 600;
+    }
+
+    nav { display: flex; gap: 8px; }
+    .nav-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .nav-btn.active, .nav-btn:hover { background: var(--accent-blue); border-color: var(--accent-blue); }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .tab-content {
+      display: none;
+      width: 100%;
+      height: 100%;
+      padding: 16px;
+    }
+    .tab-content.active { display: flex; gap: 16px; }
+
+    .viewport-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--panel-bg);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .canvas-container {
+      position: relative;
+      flex: 1;
+      background: #000;
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 112px;
+      max-height: 84px;
+      object-fit: cover;
+      opacity: 0.35;
+      pointer-events: none;
+      border-radius: 6px;
+      z-index: 2;
+    }
+    canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: var(--bg-dark);
+      padding: 10px;
+      border-radius: 6px;
+      text-align: center;
+      border: 1px solid var(--border-color);
+    }
+    .stat-val { font-size: 1.5rem; font-weight: bold; }
+    .stat-lbl { font-size: 0.75rem; color: var(--text-muted); }
+
+    .grid-section {
+      width: 480px;
+      background: var(--panel-bg);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .controls-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-start { background: var(--accent-blue); color: white; }
+    .btn-stop { background: var(--accent-red); color: white; }
+    .btn-reset { background: #d97706; color: white; }
+
+    .seating-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .desk {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 6px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      text-align: center;
+      font-size: 0.7rem;
+    }
+
+    .desk-title { color: var(--text-muted); font-weight: bold; }
+    .desk-ids { font-size: 0.6rem; color: #64748b; margin-bottom: 2px; }
+    .desk-status {
+      font-size: 1.1rem;
+      font-weight: bold;
+      width: 100%;
+      padding: 4px 0;
+      border-radius: 4px;
+      margin-top: 2px;
+      background: #334155;
+      transition: all 0.2s;
+    }
+    .desk-status.circle { background: rgba(59, 130, 246, 0.25); color: #60a5fa; border: 1px solid var(--accent-blue); }
+    .desk-status.cross { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid var(--accent-red); }
+
+    /* GENERATOR TAB */
+    #generatorTab {
+      flex-direction: column;
+      overflow-y: auto;
+      background: var(--panel-bg);
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .gen-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .print-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 16px;
+    }
+
+    .marker-card {
+      background: white;
+      color: black;
+      padding: 12px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .marker-card canvas {
+      width: 170px;
+      height: 170px;
+    }
+
+    .marker-info { font-weight: bold; font-size: 0.85rem; color: #1e293b; }
+    .marker-sub { font-size: 0.75rem; color: #64748b; }
+
+    button, .nav-btn, label, input[type="checkbox"] { touch-action: manipulation; }
+    button, .nav-btn { -webkit-tap-highlight-color: transparent; }
+
+    /* MOBILE */
+    @media (max-width: 900px) {
+      body { height: auto; min-height: 100vh; overflow: auto; }
+      header { flex-wrap: wrap; gap: 8px; padding: 12px; }
+      h1 { font-size: 1.05rem; flex-wrap: wrap; line-height: 1.2; }
+      nav { flex-wrap: wrap; width: 100%; }
+      nav .nav-btn { flex: 1; min-width: 120px; }
+      main { flex-direction: column; overflow: visible; }
+      .tab-content { flex-direction: column; height: auto; padding: 12px; }
+      .viewport-section, .grid-section { width: 100%; }
+      .canvas-container { min-height: 48vh; }
+      .stats-bar { grid-template-columns: repeat(2, 1fr); }
+      .controls-row { flex-wrap: wrap; }
+      .btn { flex: none; width: 100%; padding: 14px; font-size: 1rem; }
+      .seating-grid { grid-template-columns: repeat(3, 1fr); overflow-y: visible; flex: none; }
+      .gen-header { flex-direction: column; align-items: stretch; gap: 12px; }
+      .print-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+      .marker-card canvas { width: 140px; height: 140px; }
+      .desk { font-size: 0.75rem; padding: 8px; }
+      .desk-status { font-size: 1.25rem; }
+      video { width: 84px; max-height: 64px; }
+    }
+
+    @media (max-width: 520px) {
+      .seating-grid { grid-template-columns: repeat(2, 1fr); }
+      .stats-bar { grid-template-columns: 1fr; }
+      .print-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+      .marker-card canvas { width: 110px; height: 110px; }
+      .canvas-container { min-height: 40vh; }
+    }
+
+    @media print {
+      @page { margin: 0.5in; }
+      header, #trackerTab, .gen-header button { display: none !important; }
+      body { height: auto; overflow: visible; background: white; color: black; }
+      main { display: block; height: auto; overflow: visible; }
+      .tab-content { height: auto; padding: 0; }
+      #generatorTab {
+        display: block !important;
+        position: static;
+        width: 100%;
+        background: white;
+        color: black;
+        overflow: visible;
+        padding: 0;
+      }
+      .print-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .marker-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #000;
+      }
+      .marker-card canvas { width: 1.9in; height: 1.9in; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>
+      Classroom ArUco Response System
+      <span class="status-badge">JS Engine Active</span>
+    </h1>
+    <nav>
+      <button class="nav-btn active" onclick="switchTab('trackerTab', this)">Live Tracker</button>
+      <button class="nav-btn" onclick="switchTab('generatorTab', this)">Print 72 Markers</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- TRACKER TAB -->
+    <div id="trackerTab" class="tab-content active">
+      <div class="viewport-section">
+        <div class="canvas-container">
+          <video id="webcam" playsinline muted></video>
+          <canvas id="outputCanvas"></canvas>
+        </div>
+        <div class="stats-bar">
+          <div class="stat-card">
+            <div id="statCircle" class="stat-val" style="color: var(--accent-blue);">0</div>
+            <div class="stat-lbl">CIRCLE (O) / TRUE</div>
+          </div>
+          <div class="stat-card">
+            <div id="statCross" class="stat-val" style="color: var(--accent-red);">0</div>
+            <div class="stat-lbl">CROSS (X) / FALSE</div>
+          </div>
+          <div class="stat-card">
+            <div id="statPending" class="stat-val" style="color: var(--text-muted);">36</div>
+            <div class="stat-lbl">NO RESPONSE</div>
+          </div>
+          <div class="stat-card">
+            <div id="statPart" class="stat-val" style="color: var(--accent-green);">0%</div>
+            <div class="stat-lbl">PARTICIPATION</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-section">
+        <div class="controls-row">
+          <button id="camToggleBtn" class="btn btn-start" onclick="toggleCamera()">Start Camera</button>
+          <button class="btn btn-reset" onclick="resetAnswers()">Reset Responses</button>
+          <label style="display:flex;align-items:center;gap:8px;color:var(--text-main);font-size:0.9rem;">
+            <input type="checkbox" id="strictModeToggle" checked onchange="setStrictMode(this.checked)">
+            Strict mode
+          </label>
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-muted);">
+          Phone tip: keep markers flat, well lit, and fill the camera view. HTTPS is required on most mobile browsers.
+        </div>
+        <div id="seatingGrid" class="seating-grid"></div>
+      </div>
+    </div>
+
+    <!-- GENERATOR TAB -->
+    <div id="generatorTab" class="tab-content">
+      <div class="gen-header">
+        <h2>Printable ArUco DICT_4X4 Markers (Desks 1–36)</h2>
+        <button class="btn btn-reset" style="padding: 8px 24px; flex: none;" onclick="window.print()">Print Cards</button>
+      </div>
+      <div id="printGrid" class="print-grid"></div>
+    </div>
+  </main>
+
+  <script>
+    // First 72 rotation-0 codewords from OpenCV DICT_4X4_1000_BYTES,
+    // 4x4 bits row-major MSB-first. Entries 0-49 are DICT_4X4_50 and entries
+    // 50-71 continue the official DICT_4X4_100 ordering, covering desks 1-36.
+    // Minimum pairwise Hamming distance over these 72 codewords is 4.
+    const ARUCO_DICT_4X4 = [
+      0xb532, 0x0f9a, 0x332d, 0x9946, 0x549e,
+      0x79cd, 0x9e2e, 0xc4f2, 0xfeda, 0xcf56,
+      0xf991, 0x11a7, 0x0eb7, 0x2a0f, 0x24b1,
+      0x263e, 0x4665, 0x6600, 0x6c5e, 0x76af,
+      0x868b, 0xb02b, 0xccd5, 0xdd82, 0xfe47,
+      0x9471, 0xace4, 0xa554, 0x2123, 0x346f,
+      0x4415, 0x57b2, 0x9ecf, 0xf0cb, 0x08ae,
+      0x0929, 0x1875, 0x04ff, 0x0df6, 0x1c5a,
+      0x1718, 0x2a28, 0x328c, 0x38b2, 0x24e8,
+      0x2eeb, 0x2d3f, 0x4b64, 0x502e, 0x5013,
+      0x5194, 0x5568, 0x5d41, 0x5f97, 0x6801,
+      0x6867, 0x6124, 0x61e9, 0x6b12, 0x6fe5,
+      0x67df, 0x7e1b, 0x80a0, 0x8344, 0x8ba2,
+      0x937a, 0x846c, 0x852a, 0x859c, 0x9c89,
+      0x9fa1, 0xbb7c
+    ];
+
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const camBtn = document.getElementById('camToggleBtn');
+    
+    let stream = null;
+    let isTracking = false;
+
+    // False-positive guards.
+    // MAX_CORRECTION_BITS: a 4x4 codeword is 16 bits and the dictionary has only
+    // 72 entries, so ~15% of ALL random 16-bit patterns sit within 2 bits of some
+    // entry. Allowing 2 bits means roughly one in seven border-passing scene quads
+    // decodes to a real ID. 1 bit drops that to ~1.9%, and is still unambiguous
+    // because the minimum distance between dictionary entries is 4.
+    const MAX_CORRECTION_BITS = 1;
+    // A marker must be seen in this many consecutive frames before it counts.
+    const CONFIRM_FRAMES = 3;
+    // Strict classroom mode trades tolerance for certainty: exact dictionary
+    // matches, confident black/white cells, tighter borders, and longer proof.
+    let STRICT_MODE = true;
+    const STRICT_CONFIRM_FRAMES = 5;
+    function requiredFrames() {
+      return STRICT_MODE ? STRICT_CONFIRM_FRAMES : CONFIRM_FRAMES;
+    }
+
+    const hitCounts = {};
+    let frameHits = new Set();
+
+    // Response state for 36 desks
+    const studentResponses = {};
+    for (let i = 1; i <= 36; i++) {
+      studentResponses[i] = null;
+    }
+
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      btn.classList.add('active');
+    }
+
+    function setStrictMode(on) {
+      STRICT_MODE = !!on;
+      const toggle = document.getElementById('strictModeToggle');
+      if (toggle) toggle.checked = STRICT_MODE;
+    }
+
+    function initGrid() {
+      const grid = document.getElementById('seatingGrid');
+      grid.innerHTML = '';
+      for (let i = 1; i <= 36; i++) {
+        const circleID = (i - 1) * 2;
+        const crossID = circleID + 1;
+        
+        const desk = document.createElement('div');
+        desk.className = 'desk';
+        desk.id = `desk-${i}`;
+        desk.innerHTML = `
+          <div class="desk-title">Desk ${i}</div>
+          <div class="desk-ids">O:${circleID} | X:${crossID}</div>
+          <div class="desk-status" id="status-${i}">-</div>
+        `;
+        grid.appendChild(desk);
+      }
+    }
+
+    async function toggleCamera() {
+      if (isTracking) {
+        stopCamera();
+        return;
+      }
+
+      try {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          });
+        } catch (envErr) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          });
+        }
+        video.srcObject = stream;
+        await video.play();
+        
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+
+        isTracking = true;
+        camBtn.textContent = 'Stop Camera';
+        camBtn.className = 'btn btn-stop';
+        
+        requestAnimationFrame(processFrame);
+      } catch (err) {
+        alert("Camera access error: " + err.message);
+      }
+    }
+
+    function stopCamera() {
+      isTracking = false;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      camBtn.textContent = 'Start Camera';
+      camBtn.className = 'btn btn-start';
+    }
+
+    function processFrame() {
+      // never bail out without rescheduling, otherwise the loop dies for good
+      if (isTracking && !video.paused && !video.ended) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const gray = toGray(frame);
+
+        const candidates = detectQuadCandidates(gray, canvas.width, canvas.height);
+
+        frameHits = new Set();
+        for (const quad of candidates) {
+          const marker = decodeArUcoQuad(gray, canvas.width, canvas.height, quad);
+          if (marker) {
+            frameHits.add(marker.id);
+            drawMarkerOutline(marker.quad, marker.id, hitCounts[marker.id] >= requiredFrames());
+          }
+        }
+
+        commitConfirmed();
+        updateUI();
+      }
+
+      requestAnimationFrame(processFrame);
+    }
+
+    // Only a marker that has held still for CONFIRM_FRAMES updates a desk, so
+    // one-frame noise (a hand, a shadow, glare) can never register a response.
+    function commitConfirmed() {
+      for (const id in hitCounts) {
+        if (!frameHits.has(+id)) delete hitCounts[id];
+      }
+      for (const id of frameHits) {
+        hitCounts[id] = (hitCounts[id] || 0) + 1;
+        if (hitCounts[id] < requiredFrames()) continue;
+        if (id < 0 || id >= 72) continue;
+        const deskNum = (id >> 1) + 1;
+        studentResponses[deskNum] = (id & 1) === 0 ? 'O' : 'X';
+      }
+    }
+
+    /* ---------- shared buffers + grayscale ---------- */
+    let _gray = null, _binary = null, _tmp = null, _labels = null, _queue = null, _scratchN = 0;
+
+    function ensureScratch(n) {
+      if (_scratchN === n) return;
+      _gray = new Uint8Array(n);
+      _binary = new Uint8Array(n);
+      _tmp = new Uint8Array(n);
+      _labels = new Int32Array(n);
+      _queue = new Int32Array(n);
+      _scratchN = n;
+    }
+
+    function toGray(frame) {
+      ensureScratch(frame.width * frame.height);
+      const data = frame.data;
+      const g = _gray;
+      for (let i = 0, j = 0; j < g.length; i += 4, j++) {
+        g[j] = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+      }
+      return g;
+    }
+
+    // Otsu: global threshold that survives uneven classroom lighting
+    function otsuThreshold(gray) {
+      const hist = new Uint32Array(256);
+      for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+      const total = gray.length;
+      let sum = 0;
+      for (let t = 0; t < 256; t++) sum += t * hist[t];
+
+      let sumB = 0, wB = 0, best = 0, bestT = 127;
+      for (let t = 0; t < 256; t++) {
+        wB += hist[t];
+        if (wB === 0) continue;
+        const wF = total - wB;
+        if (wF === 0) break;
+        sumB += t * hist[t];
+        const mB = sumB / wB;
+        const mF = (sum - sumB) / wF;
+        const between = wB * wF * (mB - mF) * (mB - mF);
+        if (between > best) { best = between; bestT = t; }
+      }
+      return bestT;
+    }
+
+    // 8-neighbourhood in clockwise screen order: E, SE, S, SW, W, NW, N, NE
+    const NB_DX = [1, 1, 0, -1, -1, -1, 0, 1];
+    const NB_DY = [0, 1, 1, 1, 0, -1, -1, -1];
+
+    /* ---------- candidate quad extraction ---------- */
+    // Threshold, then a 3x3 square erosion: a pixel survives only if its whole
+    // 3x3 neighbourhood is below the threshold. Erosion is what keeps this
+    // honest -- sensor noise and uniform-texture backgrounds otherwise
+    // threshold at ~50% and percolate into one enormous ragged blob that
+    // engulfs real markers, generates hundreds of junk candidates and destroys
+    // the frame budget. A marker's black border is 1/6 of its side, so it
+    // survives easily.
+    //
+    // "all 9 dark" is "max over the 3x3 <= threshold", and max is associative
+    // over the Cartesian product, so two 3-tap passes give the exact same
+    // result as 9 compares for less than half the work.
+    function erodeBinary(gray, binary, width, height, threshold) {
+      const tmp = _tmp;
+      for (let y = 0; y < height; y++) {
+        const row = y * width;
+        for (let x = 0; x < width; x++) {
+          tmp[row + x] = Math.max(
+            gray[row + (x > 0 ? x - 1 : 0)],
+            gray[row + x],
+            gray[row + (x < width - 1 ? x + 1 : x)]
+          );
+        }
+      }
+      for (let y = 0; y < height; y++) {
+        const row = y * width;
+        const up = y > 0 ? row - width : row;
+        const dn = y < height - 1 ? row + width : row;
+        for (let x = 0; x < width; x++) {
+          binary[row + x] = Math.max(tmp[up + x], tmp[row + x], tmp[dn + x]) <= threshold ? 1 : 0;
+        }
+      }
+    }
+
+    function detectQuadCandidates(gray, width, height) {
+      const n = width * height;
+      const binary = _binary, labels = _labels, queue = _queue;
+
+      erodeBinary(gray, binary, width, height, otsuThreshold(gray));
+      labels.fill(0);
+
+      const minArea = Math.max(400, Math.round(n * 0.0006));
+      const maxArea = Math.round(n * 0.25);
+      const quads = [];
+      let label = 0;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const start = y * width + x;
+          if (binary[start] === 0 || labels[start] !== 0) continue;
+
+          label++;
+          let head = 0, tail = 0, area = 0;
+          queue[tail++] = start;
+          labels[start] = label;
+
+          while (head < tail) {
+            const cur = queue[head++];
+            area++;
+            const cx = cur % width, cy = (cur / width) | 0;
+            for (let k = 0; k < 8; k++) {
+              const nx = cx + NB_DX[k], ny = cy + NB_DY[k];
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+              const ni = ny * width + nx;
+              if (binary[ni] === 1 && labels[ni] === 0) {
+                labels[ni] = label;
+                queue[tail++] = ni;
+              }
+            }
+          }
+
+          if (area < minArea || area > maxArea) continue;
+
+          // (x, y) is the topmost-leftmost pixel of this component, which is
+          // exactly what Moore-neighbour tracing needs as a start point.
+          const contour = traceOuterContour(binary, width, height, x, y, area);
+          const quad = quadFromContour(contour);
+          if (quad) quads.push(quad);
+        }
+      }
+      return quads;
+    }
+
+    // The walk is capped relative to the component's own size: a marker's
+    // perimeter is ~6*sqrt(area), so this never truncates a real marker while
+    // stopping pathological ragged blobs from producing thousands of points.
+    function traceOuterContour(binary, width, height, sx, sy, area) {
+      const flat = [];
+      let x = sx, y = sy;
+      let back = 4; // start with West as the backtrack pixel
+      let firstDir = -1;
+      const limit = Math.min(4 * (width + height) + 64, Math.ceil(8 * Math.sqrt(area)) + 48);
+
+      for (let step = 0; step < limit; step++) {
+        flat.push(x, y);
+
+        let found = -1;
+        for (let k = 1; k <= 8; k++) {
+          const d = (back + k) & 7;
+          const nx = x + NB_DX[d], ny = y + NB_DY[d];
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height && binary[ny * width + nx] === 1) {
+            found = d;
+            break;
+          }
+        }
+        if (found < 0) break;
+
+        if (firstDir === -1) firstDir = found;
+        else if (x === sx && y === sy && found === firstDir) break;
+
+        x += NB_DX[found];
+        y += NB_DY[found];
+        back = (found + 6) & 7;
+      }
+      return flat;
+    }
+
+    function quadFromContour(flat) {
+      const n = flat.length / 2;
+      if (n < 8) return null;
+
+      let perimeter = 0;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        perimeter += Math.hypot(flat[2 * j] - flat[2 * i], flat[2 * j + 1] - flat[2 * i + 1]);
+      }
+
+      let poly = simplifyClosed(flat, Math.max(1.5, perimeter * 0.012));
+      if (poly.length < 8) return null;
+
+      poly = reduceToQuad(poly);
+      if (poly.length !== 4) return null;
+
+      const ordered = orderCorners(poly);
+      if (!isConvexQuad(ordered)) return null;
+      if (calcQuadArea(ordered) < 300) return null;
+      if (!looksLikeMarker(ordered)) return null;
+      return ordered;
+    }
+
+    // An ArUco marker is a square, so its quad must stay roughly square under
+    // perspective. This rejects the long thin and sharply-kinked quads that
+    // scene clutter produces, which would otherwise reach the decoder.
+    function looksLikeMarker(q) {
+      const sides = [];
+      for (let i = 0; i < 4; i++) {
+        const a = q[i], b = q[(i + 1) % 4];
+        sides.push(Math.hypot(b[0] - a[0], b[1] - a[1]));
+      }
+      const longest = Math.max(...sides);
+      const shortest = Math.min(...sides);
+      if (shortest < 18) return false;
+      if (longest / shortest > 2.6) return false;
+
+      for (let i = 0; i < 4; i++) {
+        const a = q[(i + 3) % 4], b = q[i], c = q[(i + 1) % 4];
+        const v1x = a[0] - b[0], v1y = a[1] - b[1];
+        const v2x = c[0] - b[0], v2y = c[1] - b[1];
+        const m1 = Math.hypot(v1x, v1y), m2 = Math.hypot(v2x, v2y);
+        if (m1 === 0 || m2 === 0) return false;
+        const cosA = (v1x * v2x + v1y * v2y) / (m1 * m2);
+        const angle = Math.acos(Math.max(-1, Math.min(1, cosA))) * 180 / Math.PI;
+        if (angle < 45 || angle > 135) return false;
+      }
+      return true;
+    }
+
+    // Douglas-Peucker on a closed loop: split at the two farthest-apart points
+    function simplifyClosed(flat, eps) {
+      const n = flat.length / 2;
+      if (n < 4) return [];
+
+      let a = 0, best = -1;
+      for (let i = 1; i < n; i++) {
+        const d = segDist2(flat, i, 0, i);
+        if (d > best) { best = d; a = i; }
+      }
+
+      let b = a;
+      best = -1;
+      for (let i = 0; i < n; i++) {
+        const d = segDist2(flat, i, a, i);
+        if (d > best) { best = d; b = i; }
+      }
+      if (a === b) return [];
+
+      const chainA = [];
+      for (let i = a; i <= b; i++) chainA.push(flat[2 * i], flat[2 * i + 1]);
+
+      const chainB = [];
+      for (let i = b; i < n; i++) chainB.push(flat[2 * i], flat[2 * i + 1]);
+      for (let i = 0; i <= a; i++) chainB.push(flat[2 * i], flat[2 * i + 1]);
+
+      const ra = rdp(chainA, eps);
+      const rb = rdp(chainB, eps);
+      // both chains share their endpoints; keep each vertex once
+      return ra.slice(0, ra.length - 2).concat(rb.slice(0, rb.length - 2));
+    }
+
+    function rdp(flat, eps) {
+      const n = flat.length / 2;
+      if (n < 3) return flat.slice();
+
+      const keep = new Uint8Array(n);
+      keep[0] = 1;
+      keep[n - 1] = 1;
+
+      const stack = [[0, n - 1]];
+      const eps2 = eps * eps;
+      while (stack.length) {
+        const seg = stack.pop();
+        let maxD = -1, idx = -1;
+        for (let i = seg[0] + 1; i < seg[1]; i++) {
+          const d = segDist2(flat, i, seg[0], seg[1]);
+          if (d > maxD) { maxD = d; idx = i; }
+        }
+        if (maxD > eps2 && idx > 0) {
+          keep[idx] = 1;
+          stack.push([seg[0], idx], [idx, seg[1]]);
+        }
+      }
+
+      const out = [];
+      for (let i = 0; i < n; i++) if (keep[i]) out.push(flat[2 * i], flat[2 * i + 1]);
+      return out;
+    }
+
+    function segDist2(flat, i, a, b) {
+      const px = flat[2 * i], py = flat[2 * i + 1];
+      const ax = flat[2 * a], ay = flat[2 * a + 1];
+      const bx = flat[2 * b], by = flat[2 * b + 1];
+      const vx = bx - ax, vy = by - ay;
+      const l2 = vx * vx + vy * vy;
+      if (l2 === 0) return (px - ax) ** 2 + (py - ay) ** 2;
+      let t = ((px - ax) * vx + (py - ay) * vy) / l2;
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      const dx = px - (ax + t * vx), dy = py - (ay + t * vy);
+      return dx * dx + dy * dy;
+    }
+
+    // Collapse a polygon to exactly 4 vertices, dropping the flattest corners
+    function reduceToQuad(flat) {
+      let poly = [];
+      for (let i = 0; i < flat.length; i += 2) poly.push([flat[i], flat[i + 1]]);
+
+      while (poly.length > 4) {
+        const n = poly.length;
+        let dropAt = 0, bestCost = Infinity;
+        for (let i = 0; i < n; i++) {
+          const a = poly[(i + n - 1) % n], b = poly[i], c = poly[(i + 1) % n];
+          const cost = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+          if (cost < bestCost) { bestCost = cost; dropAt = i; }
+        }
+        poly.splice(dropAt, 1);
+      }
+      return poly;
+    }
+
+    // Corner order must be consistent, otherwise the perspective sample reads
+    // a scrambled matrix and the black-border check always fails.
+    function orderCorners(poly) {
+      let cx = 0, cy = 0;
+      for (const p of poly) { cx += p[0]; cy += p[1]; }
+      cx /= 4; cy /= 4;
+
+      const sorted = poly.slice().sort((a, b) =>
+        Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
+
+      let start = 0, best = Infinity;
+      for (let i = 0; i < 4; i++) {
+        const s = sorted[i][0] + sorted[i][1];
+        if (s < best) { best = s; start = i; }
+      }
+      return [sorted[start], sorted[(start + 1) % 4], sorted[(start + 2) % 4], sorted[(start + 3) % 4]];
+    }
+
+    function isConvexQuad(q) {
+      let sign = 0;
+      for (let i = 0; i < 4; i++) {
+        const a = q[i], b = q[(i + 1) % 4], c = q[(i + 2) % 4];
+        const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+        if (cross === 0) return false;
+        const s = cross > 0 ? 1 : -1;
+        if (sign === 0) sign = s;
+        else if (sign !== s) return false;
+      }
+      return true;
+    }
+
+    function calcQuadArea(q) {
+      let area = 0;
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        area += q[i][0] * q[j][1] - q[j][0] * q[i][1];
+      }
+      return Math.abs(area) / 2;
+    }
+
+    /* ---------- ArUco decode ---------- */
+
+    // A tilted marker is a projective image of a flat square, not a bilinear
+    // one, so cells must be sampled through the quad's homography. Bilinear
+    // interpolation drifts off the cells as soon as the quad stops being a
+    // parallelogram, which is what the border check then rejects.
+    function quadToHomography(q) {
+      const x0 = q[0][0], y0 = q[0][1], x1 = q[1][0], y1 = q[1][1];
+      const x2 = q[2][0], y2 = q[2][1], x3 = q[3][0], y3 = q[3][1];
+
+      const a11 = x1 - x2, a12 = x3 - x2;
+      const a21 = y1 - y2, a22 = y3 - y2;
+      const det = a11 * a22 - a12 * a21;
+      if (Math.abs(det) < 1e-9) return null;
+
+      const g = ((x2 - x1 - x3 + x0) * a22 - a12 * (y2 - y1 - y3 + y0)) / det;
+      const h = (a11 * (y2 - y1 - y3 + y0) - (x2 - x1 - x3 + x0) * a21) / det;
+
+      return {
+        a: x1 * (g + 1) - x0,
+        b: x3 * (h + 1) - x0,
+        c: x0,
+        d: y1 * (g + 1) - y0,
+        e: y3 * (h + 1) - y0,
+        f: y0,
+        g, h
+      };
+    }
+
+    function decodeArUcoQuad(gray, width, height, quad) {
+      const H = quadToHomography(quad);
+      if (!H) return null;
+
+      // 6x6 cell means: black border + 4x4 payload, perspective-warped
+      const cells = new Float64Array(36);
+      const cellLo = new Float64Array(36).fill(255);
+      const cellHi = new Float64Array(36).fill(0);
+      let min = 255, max = 0;
+
+      for (let row = 0; row < 6; row++) {
+        for (let col = 0; col < 6; col++) {
+          let sum = 0, cnt = 0;
+          let lo = 255, hi = 0;
+          for (let sy = 0; sy < 3; sy++) {
+            for (let sx = 0; sx < 3; sx++) {
+              const u = (col + 0.25 + 0.25 * sx) / 6;
+              const v = (row + 0.25 + 0.25 * sy) / 6;
+              const w = H.g * u + H.h * v + 1;
+              if (w <= 1e-6) return null;
+              const px = (H.a * u + H.b * v + H.c) / w;
+              const py = (H.d * u + H.e * v + H.f) / w;
+              const ix = Math.round(px), iy = Math.round(py);
+              if (ix < 0 || ix >= width || iy < 0 || iy >= height) return null;
+              const sample = gray[iy * width + ix];
+              sum += sample;
+              cnt++;
+              if (sample < lo) lo = sample;
+              if (sample > hi) hi = sample;
+            }
+          }
+          const index = row * 6 + col;
+          const avg = sum / cnt;
+          cells[index] = avg;
+          cellLo[index] = lo;
+          cellHi[index] = hi;
+          if (avg < min) min = avg;
+          if (avg > max) max = avg;
+        }
+      }
+
+      // Flat / washed-out quad: not a marker
+      if (max - min < (STRICT_MODE ? 65 : 55)) return null;
+
+      const t = (min + max) / 2;
+
+      // Strict cells must be decisively black or white. Phone glare, blur, and
+      // screen texture leave gray samples straddling the threshold; reject those.
+      if (STRICT_MODE) {
+        const dead = (max - min) * 0.15;
+        for (let i = 0; i < 36; i++) {
+          if (Math.abs(cells[i] - t) < dead) return null;
+          if (cells[i] > t) {
+            if (cellLo[i] <= t) return null;
+          } else if (cellHi[i] > t) return null;
+        }
+      }
+
+      const grid = [];
+      for (let r = 0; r < 6; r++) {
+        const row = [];
+        for (let c = 0; c < 6; c++) row.push(cells[r * 6 + c] > t ? 1 : 0);
+        grid.push(row);
+      }
+
+      // Require the black border to be black with real margin, not merely on the
+      // wrong side of the threshold. Scene clutter usually fails here.
+      const borderLimit = min + (max - min) * (STRICT_MODE ? 0.18 : 0.25);
+      for (let i = 0; i < 6; i++) {
+        if (grid[0][i] || grid[5][i] || grid[i][0] || grid[i][5]) return null;
+        if (cells[i] > borderLimit) return null;
+        if (cells[30 + i] > borderLimit) return null;
+        if (cells[i * 6] > borderLimit) return null;
+        if (cells[i * 6 + 5] > borderLimit) return null;
+      }
+
+      let bits = [];
+      for (let r = 1; r <= 4; r++) for (let c = 1; c <= 4; c++) bits.push(grid[r][c]);
+
+      const maxCorrection = STRICT_MODE ? 0 : MAX_CORRECTION_BITS;
+      let bestId = -1, bestDist = 99, bestWord = 0, bestRot = -1;
+      for (let rot = 0; rot < 4; rot++) {
+        const val = bitsToWord(bits);
+        const id = findDictionaryMatch(val, maxCorrection);
+        if (id !== -1) {
+          const dist = hamming(val, ARUCO_DICT_4X4[id]);
+          if (dist < bestDist) { bestDist = dist; bestId = id; bestWord = val; bestRot = rot; }
+        }
+        bits = rotate4x4(bits);
+      }
+
+      if (bestId === -1) return null;
+      if (STRICT_MODE && bestDist !== 0) return null;
+      return { id: bestId, quad: quad, word: bestWord, rotation: bestRot };
+    }
+
+    function bitsToWord(bits) {
+      let val = 0;
+      for (let i = 0; i < 16; i++) {
+        if (bits[i]) val |= (1 << (15 - i));
+      }
+      return val;
+    }
+
+    function rotate4x4(bits) {
+      const rotated = new Array(16);
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          rotated[c * 4 + (3 - r)] = bits[r * 4 + c];
+        }
+      }
+      return rotated;
+    }
+
+    function hamming(a, b) {
+      let diff = a ^ b, dist = 0;
+      while (diff > 0) {
+        dist += diff & 1;
+        diff >>>= 1;
+      }
+      return dist;
+    }
+
+    function findDictionaryMatch(val, maxDist) {
+      let bestId = -1, bestDist = maxDist + 1;
+      for (let id = 0; id < ARUCO_DICT_4X4.length; id++) {
+        const dist = hamming(val, ARUCO_DICT_4X4[id]);
+        if (dist < bestDist) { bestDist = dist; bestId = id; }
+        if (bestDist === 0) break;
+      }
+      return bestDist <= maxDist ? bestId : -1;
+    }
+
+    function drawMarkerOutline(q, id, confirmed) {
+      const color = confirmed ? "#10b981" : "#f59e0b";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(q[0][0], q[0][1]);
+      for (let j = 1; j < 4; j++) ctx.lineTo(q[j][0], q[j][1]);
+      ctx.closePath();
+      ctx.stroke();
+
+      const desk = (id >> 1) + 1;
+      const label = desk <= 36
+        ? `Desk ${desk} ${(id & 1) === 0 ? 'O' : 'X'}`
+        : `ID ${id}`;
+      ctx.fillStyle = color;
+      ctx.font = "bold 16px Arial";
+      ctx.fillText(label + (confirmed ? '' : ' ...'), q[0][0], q[0][1] - 6);
+    }
+
+    function updateUI() {
+      let circles = 0, crosses = 0, pending = 0;
+
+      for (let i = 1; i <= 36; i++) {
+        const val = studentResponses[i];
+        const statusEl = document.getElementById(`status-${i}`);
+        const cls = val === 'O' ? 'circle' : (val === 'X' ? 'cross' : '');
+        const glyph = val === 'O' ? '◯' : (val === 'X' ? '✕' : '-');
+        // skip untouched DOM nodes so the render loop stays cheap
+        if (statusEl.textContent !== glyph || statusEl.className !== `desk-status${cls ? ' ' + cls : ''}`) {
+          statusEl.textContent = glyph;
+          statusEl.className = `desk-status${cls ? ' ' + cls : ''}`;
+        }
+        if (val === 'O') circles++;
+        else if (val === 'X') crosses++;
+        else pending++;
+      }
+
+      document.getElementById('statCircle').textContent = circles;
+      document.getElementById('statCross').textContent = crosses;
+      document.getElementById('statPending').textContent = pending;
+      document.getElementById('statPart').textContent = `${Math.round(((circles + crosses) / 36) * 100)}%`;
+    }
+
+    function resetAnswers() {
+      for (let i = 1; i <= 36; i++) {
+        studentResponses[i] = null;
+      }
+      for (const id in hitCounts) delete hitCounts[id];
+      updateUI();
+    }
+
+    function generatePrintableMarkers() {
+      const container = document.getElementById('printGrid');
+      container.innerHTML = '';
+
+      for (let id = 0; id < ARUCO_DICT_4X4.length; id++) {
+        const deskNum = (id >> 1) + 1;
+        const isCircle = (id & 1) === 0;
+
+        const card = document.createElement('div');
+        card.className = 'marker-card';
+
+        const mCanvas = document.createElement('canvas');
+        mCanvas.width = 200;
+        mCanvas.height = 200;
+        drawArUco4x4(mCanvas, id);
+        card.appendChild(mCanvas);
+
+        const info = document.createElement('div');
+        info.className = 'marker-info';
+        info.textContent = `Desk ${deskNum} - ${isCircle ? 'CIRCLE (O)' : 'CROSS (X)'}`;
+        card.appendChild(info);
+
+        const sub = document.createElement('div');
+        sub.className = 'marker-sub';
+        sub.textContent = `ArUco ID: ${id}`;
+        card.appendChild(sub);
+
+        container.appendChild(card);
+      }
+    }
+
+    function drawArUco4x4(canvasEl, id) {
+      const mCtx = canvasEl.getContext('2d');
+      const size = canvasEl.width;
+      const quiet = Math.round(size * 0.06);
+      const markerSize = size - quiet * 2;
+      const cell = markerSize / 6;
+      const bits = ARUCO_DICT_4X4[id];
+
+      mCtx.fillStyle = 'white';
+      mCtx.fillRect(0, 0, size, size);
+
+      for (let r = 0; r < 6; r++) {
+        for (let c = 0; c < 6; c++) {
+          let on = 0;
+          if (r > 0 && r < 5 && c > 0 && c < 5) {
+            on = (bits >> (15 - ((r - 1) * 4 + (c - 1)))) & 1;
+          }
+          mCtx.fillStyle = on ? 'white' : 'black';
+          // snap to whole pixels so antialiasing can't leave grey seams
+          const x0 = quiet + Math.round(c * cell);
+          const y0 = quiet + Math.round(r * cell);
+          const x1 = quiet + Math.round((c + 1) * cell);
+          const y1 = quiet + Math.round((r + 1) * cell);
+          mCtx.fillRect(x0, y0, x1 - x0, y1 - y0);
+        }
+      }
+    }
+
+    initGrid();
+    generatePrintableMarkers();
+  </script>
+</body>
+</html>
